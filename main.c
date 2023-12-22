@@ -23,10 +23,10 @@ typedef struct {
 
 Cell grid[HEIGHT][WIDTH] = {0};
 
-void init_grid() {
+void init_grid(int random) {
     for(size_t i = 0; i < HEIGHT; i++) {
         for(size_t j = 0; j < WIDTH; j++) {
-            if(rand() % 2 == 0) {
+            if(rand() % 2 == 0 && random == 1) {
                 grid[i][j].state = ALIVE;
                 continue;
             }
@@ -103,16 +103,35 @@ void init_glider(size_t offset) {
     grid[offset+2][offset+2].state = ALIVE;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    char *program = argv[0];
     srand(time(NULL));
-    init_grid();
-    init_glider(0);
-    init_glider(4);
-    init_glider(8);
     system("clear");
-    while(print_grid() != 0) {
-        usleep(SPEED * 1000);
-        gen_next();
-        system("clear");
+    if(argc < 2 || strcmp(argv[1], "default") == 0) {
+        init_grid(1);
+        while(print_grid() != 0) {
+            usleep(SPEED * 1000);
+            gen_next();
+            system("clear");
+        }
+    } else if(strcmp(argv[1], "glider") == 0) {
+        init_grid(0);
+        init_glider(0);
+        while(print_grid() != 0) {
+            usleep(SPEED * 1000);
+            gen_next();
+            system("clear");
+        }
+    } else if(strcmp(argv[1], "both") == 0) {
+        init_grid(1);
+        init_glider(0);
+        while(print_grid() != 0) {
+            usleep(SPEED * 1000);
+            gen_next();
+            system("clear");
+        }
+    } else {
+        fprintf(stderr, "usage: %s <default || glider || both>\n", program);
+        exit(1);
     }
 }
