@@ -4,20 +4,22 @@
 #include <unistd.h>
 #include <time.h>
 
-#define WIDTH 100 
-#define HEIGHT 50 
+#define WIDTH 40 
+#define HEIGHT 20 
 
-#define SPEED 250 
+#define SPEED 50 
 
 #define BACKGROUND '-'
 #define CELL '#'
 #define ALMOST_DEAD '*'
+#define CONDUCTOR_CELL '^'
 
 
 typedef enum {
     DEAD,
     ALIVE,
     DYING,
+    CONDUCTOR,
 } State;
 
 typedef State cur[9];
@@ -26,6 +28,8 @@ typedef enum {
     GOL,
     SEEDS,
     BRAIN,
+    DAYNIGHT,
+    WIREWORLD,
 } Automaton;
 
 typedef struct {
@@ -46,6 +50,18 @@ State brain[3][9] = {
     {DEAD, DEAD, ALIVE, DEAD, DEAD, DEAD, DEAD, DEAD, DEAD},
     {DYING, DYING, DYING, DYING, DYING, DYING, DYING, DYING, DYING},
     {DEAD, DEAD, DEAD, DEAD, DEAD, DEAD, DEAD, DEAD, DEAD},
+};
+
+State daynight[3][9] = {
+    {DEAD, DEAD, DEAD, ALIVE, DEAD, DEAD, ALIVE, ALIVE, ALIVE},
+    {DEAD, DEAD, DEAD, ALIVE, ALIVE, DEAD, ALIVE, ALIVE, ALIVE},
+};
+
+State wireworld[4][9] = {
+    {DEAD, DEAD, DEAD, ALIVE, DEAD, DEAD, ALIVE, ALIVE, ALIVE},
+    {DYING, DYING, DYING, DYING, DYING, DYING, DYING, DYING, DYING},
+    {CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR},
+    {CONDUCTOR, ALIVE, ALIVE, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR},
 };
 
 Cell grid[HEIGHT][WIDTH] = {0};
@@ -99,6 +115,10 @@ int print_grid() {
                 case DYING:
                     printf("%c", ALMOST_DEAD);
                     break;
+                case CONDUCTOR:
+                    alive_count++;
+                    printf("%c", CONDUCTOR_CELL);
+                    break;
             }
         }
         printf("\n");
@@ -125,8 +145,23 @@ void init_oscillator(size_t offset) {
     grid[offset+2][6].state = DYING;
 }
 
+void init_diode(size_t offset) {
+    grid[offset+1][0].state = CONDUCTOR;
+    grid[offset+1][1].state = DYING;
+    grid[offset+1][2].state = ALIVE;
+    grid[offset+0][3].state = CONDUCTOR;
+    grid[offset+2][3].state = CONDUCTOR;
+    grid[offset+2][4].state = CONDUCTOR;
+    grid[offset+0][4].state = CONDUCTOR;
+    grid[offset+1][5].state = CONDUCTOR;
+    grid[offset+1][6].state = CONDUCTOR;
+    for(size_t i = 7; i < WIDTH; i++) {
+        grid[offset+1][i].state = CONDUCTOR;
+    }
+}
+
 void usage(char *program) {
-    fprintf(stderr, "usage: %s <gol | seeds | bbrain> -r -o <glider & oscillator> \n", program);
+    fprintf(stderr, "usage: %s <gol | seeds | bbrain | daynight | wireworld> -r -o <glider & oscillator & diode> \n", program);
     exit(1);
 }
 
@@ -135,6 +170,7 @@ int main(int argc, char **argv) {
     char *program = *argv + 0;
     int glider = 0;
     int oscillator = 0;
+    int diode = 0;
     int random = 0;
     char *automaton_input = *(++argv);
     int automaton = GOL;
@@ -147,6 +183,10 @@ int main(int argc, char **argv) {
         automaton = SEEDS;
     } else if(strcmp(automaton_input, "bbrain") == 0) {
         automaton = BRAIN;
+    } else if(strcmp(automaton_input, "daynight") == 0) {
+        automaton = DAYNIGHT;
+    } else if(strcmp(automaton_input, "wireworld") == 0) {
+        automaton = WIREWORLD;
     } else {
         usage(program);
     }
@@ -161,12 +201,9 @@ int main(int argc, char **argv) {
             }
             while(*(++argv) != NULL) {
                 char *option = *(argv);
-                if(!glider) {
-                    glider = strcmp(option, "glider") == 0;
-                }
-                if(!oscillator) {
-                    oscillator = strcmp(option, "oscillator") == 0;
-                }
+                if(!glider) glider = strcmp(option, "glider") == 0;
+                if(!oscillator) oscillator = strcmp(option, "oscillator") == 0;
+                if(!diode) diode = strcmp(option, "diode") == 0;
             }
         }
         if(strcmp(flag, "-h") == 0) {
@@ -176,12 +213,9 @@ int main(int argc, char **argv) {
     srand(time(NULL));
     system("clear");
     init_grid(random);
-    if(glider) {
-        init_glider(5);
-    }
-    if(oscillator) {
-        init_oscillator(5);
-    }
+    if(glider) init_glider(5);
+    if(oscillator) init_oscillator(5);
+    if(diode) init_diode(5);
     cur *current_state = gol;
     switch(automaton) {
         case GOL:
@@ -192,6 +226,12 @@ int main(int argc, char **argv) {
             break;
         case BRAIN:
             current_state = brain;
+            break;
+        case DAYNIGHT:
+            current_state = daynight;
+            break;
+        case WIREWORLD:
+            current_state = wireworld;
             break;
     }
 
