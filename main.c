@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <time.h>
 
-#define WIDTH 40 
-#define HEIGHT 20 
+#define WIDTH 80 
+#define HEIGHT 40 
 
 #define SPEED 50 
 
@@ -23,14 +23,6 @@ typedef enum {
 } State;
 
 typedef State cur[9];
-
-typedef enum {
-    GOL,
-    SEEDS,
-    BRAIN,
-    DAYNIGHT,
-    WIREWORLD,
-} Automaton;
 
 typedef struct {
     State state;
@@ -189,6 +181,8 @@ typedef struct {
 int main(int argc, char **argv) {
     // (void) supresses unused variable warning
     (void)argc;
+
+    srand(time(NULL));
     Automatons automaton = {0};
     Options options[OPTION_SIZE] = {
         {"glider", 0},
@@ -233,7 +227,7 @@ int main(int argc, char **argv) {
             for(size_t i = 0; i < OPTION_SIZE && *(argv) != NULL; i++) {
                 char *option = *(argv);
                 printf("%s\n", option);
-                if(!automaton.options[i].value && strcmp(option, automaton.options[i].arg) == 0) {
+                if(strcmp(option, automaton.options[i].arg) == 0) {
                     automaton.options[i].value = 1;
                     (void)*(++argv);
                 }
@@ -243,7 +237,6 @@ int main(int argc, char **argv) {
             usage(program);
         }
     }
-    srand(time(NULL));
     system("clear");
     init_grid(automaton.random);
     if(automaton.options[0].value) init_glider(5);
