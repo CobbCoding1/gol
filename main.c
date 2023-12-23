@@ -36,6 +36,8 @@ typedef struct {
     State state;
 } Cell;
 
+#define TYPE_SIZE 5
+
 State gol[2][9] = {
     {DEAD, DEAD, DEAD, ALIVE, DEAD, DEAD, DEAD, DEAD, DEAD},
     {DEAD, DEAD, ALIVE, ALIVE, DEAD, DEAD, DEAD, DEAD, DEAD},
@@ -165,45 +167,76 @@ void usage(char *program) {
     exit(1);
 }
 
+typedef struct {
+    char *arg;
+    int value;
+} Options;
+
+typedef void(*fun_ptr);
+
+typedef struct {
+    char *arg;
+    fun_ptr ptr;
+} Type;
+
+#define OPTION_SIZE 3
+typedef struct {
+    cur *automaton;
+    int random;
+    Options options[OPTION_SIZE];
+} Automatons;
+
 int main(int argc, char **argv) {
+    // (void) supresses unused variable warning
     (void)argc;
+    Automatons automaton = {0};
+    Options options[OPTION_SIZE] = {
+        {"glider", 0},
+        {"oscillator", 0},
+        {"diode", 0},
+    };
+
+    Type type[TYPE_SIZE] = {
+        {"gol", &gol},
+        {"seeds", &seeds},
+        {"bbrain", &brain},
+        {"daynight", &daynight},
+        {"wireworld", &wireworld},
+    };
+    memcpy(automaton.options, options, sizeof(Options) * OPTION_SIZE);
     char *program = *argv + 0;
-    int glider = 0;
-    int oscillator = 0;
-    int diode = 0;
-    int random = 0;
     char *automaton_input = *(++argv);
-    int automaton = GOL;
     if(automaton_input == NULL) {
         usage(program);
     }
-    if(strcmp(automaton_input, "gol") == 0) {
-        automaton = GOL;
-    } else if(strcmp(automaton_input, "seeds") == 0) {
-        automaton = SEEDS;
-    } else if(strcmp(automaton_input, "bbrain") == 0) {
-        automaton = BRAIN;
-    } else if(strcmp(automaton_input, "daynight") == 0) {
-        automaton = DAYNIGHT;
-    } else if(strcmp(automaton_input, "wireworld") == 0) {
-        automaton = WIREWORLD;
-    } else {
+
+    for(size_t i = 0; i < TYPE_SIZE; i++) {
+        if(strcmp(type[i].arg, automaton_input) == 0) {
+           automaton.automaton = type[i].ptr; 
+        }
+    }
+    if(automaton.automaton == NULL) {
         usage(program);
     }
+
     while(*(++argv) != NULL) {
         char *flag = *(argv);
         if(strcmp(flag, "-r") == 0) {
-            random = 1;
+            automaton.random = 1;
         } 
         if(strcmp(flag, "-o") == 0) {
             if(*(argv + 1) == NULL) {
                 usage(program);
             }
-            while(*(++argv) != NULL) {
+            // (void) supresses the unused calculation warning
+            (void)*(++argv);
+            for(size_t i = 0; i < OPTION_SIZE && *(argv) != NULL; i++) {
                 char *option = *(argv);
-                if(!glider) glider = strcmp(option, "glider") == 0;
-                if(!oscillator) oscillator = strcmp(option, "oscillator") == 0;
-                if(!diode) diode = strcmp(option, "diode") == 0;
+                printf("%s\n", option);
+                if(!automaton.options[i].value && strcmp(option, automaton.options[i].arg) == 0) {
+                    automaton.options[i].value = 1;
+                    (void)*(++argv);
+                }
             }
         }
         if(strcmp(flag, "-h") == 0) {
@@ -212,32 +245,13 @@ int main(int argc, char **argv) {
     }
     srand(time(NULL));
     system("clear");
-    init_grid(random);
-    if(glider) init_glider(5);
-    if(oscillator) init_oscillator(5);
-    if(diode) init_diode(5);
-    cur *current_state = gol;
-    switch(automaton) {
-        case GOL:
-            current_state = gol;
-            break;
-        case SEEDS:
-            current_state = seeds;
-            break;
-        case BRAIN:
-            current_state = brain;
-            break;
-        case DAYNIGHT:
-            current_state = daynight;
-            break;
-        case WIREWORLD:
-            current_state = wireworld;
-            break;
-    }
-
+    init_grid(automaton.random);
+    if(automaton.options[0].value) init_glider(5);
+    if(automaton.options[1].value) init_oscillator(5);
+    if(automaton.options[2].value) init_diode(5);
     while(print_grid() != 0) {
         usleep(SPEED * 1000);
-        gen_next(current_state);
+        gen_next(automaton.automaton);
         system("clear");
     }
 }
