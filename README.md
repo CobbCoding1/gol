@@ -1,3 +1,19 @@
-### Game of Life
+# GOL 
 
-Simple Implementation of Conway's Game of Life in C
+Implementation of different Cellular Automaton in C.
+
+Dependencies: GCC
+
+## Quick Start
+```sh
+./build.sh
+./main <gol | seeds | bbrain | daynight | wireworld> -r -o <glider & oscillator & diode>
+```
+
+## Implementations
+Game of Life,
+Seeds,
+Brian's Brain,
+Day & Night,
+Wireworld.
+
