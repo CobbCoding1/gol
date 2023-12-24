@@ -1,13 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <time.h>
 
-#define WIDTH 80 
-#define HEIGHT 40 
+#include <termios.h>
 
-#define SPEED 50 
+#define WIDTH 30 
+#define HEIGHT 20 
+
+#define SPEED 500 
 
 #define BACKGROUND '-'
 #define CELL '#'
@@ -28,7 +31,7 @@ typedef struct {
     State state;
 } Cell;
 
-#define TYPE_SIZE 5
+struct termios orig_termios;
 
 State gol[2][9] = {
     {DEAD, DEAD, DEAD, ALIVE, DEAD, DEAD, DEAD, DEAD, DEAD},
@@ -57,6 +60,61 @@ State wireworld[4][9] = {
     {CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR},
     {CONDUCTOR, ALIVE, ALIVE, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR},
 };
+
+typedef struct {
+    char *arg;
+    int value;
+} Options;
+
+typedef void(*fun_ptr);
+
+typedef struct {
+    char *arg;
+    fun_ptr ptr;
+} Type;
+
+#define TYPE_SIZE 5
+#define OPTION_SIZE 3
+typedef struct {
+    cur *automaton;
+    int random;
+    Options options[OPTION_SIZE];
+    size_t type_index;
+} Automatons;
+
+Type type[TYPE_SIZE] = {
+    {"gol", &gol},
+    {"seeds", &seeds},
+    {"bbrain", &brain},
+    {"daynight", &daynight},
+    {"wireworld", &wireworld},
+};
+
+void die(const char *s) { (void)s; }
+void stop_raw() {
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) {
+        die("tcsetattr");
+    }
+}
+
+void begin_raw() {
+    if(tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+        die("tcgetattr");
+    }
+    atexit(stop_raw);
+    struct termios raw = orig_termios;
+    //raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    //raw.c_oflag &= ~(OPOST);
+    //raw.c_cflag |= (CS8);
+    //raw.c_iflag |= IUTF8;
+    // ICANON | IEXTEN
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG);
+    //raw.c_cc[VMIN] = 0;
+    //raw.c_cc[VTIME] = 1;
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+        die("tcsetattr");
+    }
+}
 
 Cell grid[HEIGHT][WIDTH] = {0};
 
@@ -94,7 +152,7 @@ void gen_next(State automaton[][9]) {
     memcpy(grid, new_grid, sizeof(Cell) * HEIGHT * WIDTH);
 }
 
-int print_grid() {
+int print_grid(Automatons *automaton) {
     int alive_count = 0;
     for(size_t i = 0; i < HEIGHT; i++) {
         for(size_t j = 0; j < WIDTH; j++) {
@@ -117,6 +175,7 @@ int print_grid() {
         }
         printf("\n");
     }
+    printf("\n automaton: %s\n", type[automaton->type_index].arg);
     return alive_count;
 }
 
@@ -159,24 +218,11 @@ void usage(char *program) {
     exit(1);
 }
 
-typedef struct {
-    char *arg;
-    int value;
-} Options;
-
-typedef void(*fun_ptr);
-
-typedef struct {
-    char *arg;
-    fun_ptr ptr;
-} Type;
-
-#define OPTION_SIZE 3
-typedef struct {
-    cur *automaton;
-    int random;
-    Options options[OPTION_SIZE];
-} Automatons;
+void render(Automatons *automaton) {
+    system("clear");
+    print_grid(automaton);
+    gen_next(automaton->automaton);
+}
 
 int main(int argc, char **argv) {
     // (void) supresses unused variable warning
@@ -190,14 +236,8 @@ int main(int argc, char **argv) {
         {"diode", 0},
     };
 
-    Type type[TYPE_SIZE] = {
-        {"gol", &gol},
-        {"seeds", &seeds},
-        {"bbrain", &brain},
-        {"daynight", &daynight},
-        {"wireworld", &wireworld},
-    };
     memcpy(automaton.options, options, sizeof(Options) * OPTION_SIZE);
+
     char *program = *argv + 0;
     char *automaton_input = *(++argv);
     if(automaton_input == NULL) {
@@ -206,7 +246,8 @@ int main(int argc, char **argv) {
 
     for(size_t i = 0; i < TYPE_SIZE; i++) {
         if(strcmp(type[i].arg, automaton_input) == 0) {
-           automaton.automaton = type[i].ptr; 
+            automaton.type_index = i;
+            automaton.automaton = type[i].ptr; 
         }
     }
     if(automaton.automaton == NULL) {
@@ -237,14 +278,38 @@ int main(int argc, char **argv) {
             usage(program);
         }
     }
-    system("clear");
+
+    begin_raw();
+
+    char c;
+
     init_grid(automaton.random);
     if(automaton.options[0].value) init_glider(5);
     if(automaton.options[1].value) init_oscillator(5);
     if(automaton.options[2].value) init_diode(5);
-    while(print_grid() != 0) {
-        usleep(SPEED * 1000);
-        gen_next(automaton.automaton);
-        system("clear");
+    render(&automaton);
+    while(read(STDIN_FILENO, &c, 1) == 1) {
+        switch(c) {
+            case 'q':
+                return 0;
+                break;
+            case 'j':
+                automaton.type_index -= 1;
+                automaton.type_index %= TYPE_SIZE;
+                automaton.automaton = type[automaton.type_index].ptr;
+                render(&automaton);
+                break;
+            case 'k':
+                automaton.type_index += 1;
+                automaton.type_index %= TYPE_SIZE;
+                automaton.automaton = type[automaton.type_index].ptr;
+                render(&automaton);
+                break;
+            case 'n':
+                render(&automaton);
+                break;
+            default:
+                break;
+        }
     }
 }
