@@ -287,6 +287,7 @@ int main(int argc, char **argv) {
     if(automaton.options[0].value) init_glider(5);
     if(automaton.options[1].value) init_oscillator(5);
     if(automaton.options[2].value) init_diode(5);
+    int option_mode = 0;
     render(&automaton);
     while(read(STDIN_FILENO, &c, 1) == 1) {
         switch(c) {
@@ -307,6 +308,33 @@ int main(int argc, char **argv) {
                 break;
             case 'n':
                 render(&automaton);
+                break;
+            case 'r':
+                init_grid(1);
+                render(&automaton);
+                break;
+            case 'g':
+                if(option_mode) {
+                    init_glider(5);
+                    option_mode = 0;
+                }
+                render(&automaton);
+                break;
+            case 'd':
+                if(option_mode) {
+                    init_glider(5);
+                    option_mode = 0;
+                }
+                render(&automaton);
+                break;
+            case 'o':
+                if(option_mode) {
+                    init_glider(5);
+                    option_mode = 0;
+                    render(&automaton);
+                } else {
+                    option_mode = 1; 
+                }
                 break;
             default:
                 break;
