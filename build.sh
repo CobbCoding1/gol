@@ -1,2 +1,2 @@
 set -xe
-gcc main.c -o main -Wall -Wextra -pedantic
+gcc main.c -lpthread -o main -Wall -Wextra -pedantic

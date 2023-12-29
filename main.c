@@ -6,9 +6,10 @@
 #include <time.h>
 
 #include <termios.h>
+#include <pthread.h>
 
-#define WIDTH 30 
-#define HEIGHT 20 
+#define WIDTH 50 
+#define HEIGHT 25 
 
 #define SPEED 500 
 
@@ -24,6 +25,13 @@ typedef enum {
     DYING,
     CONDUCTOR,
 } State;
+
+typedef enum {
+    NORMAL,
+    OPTION,
+} Mode;
+
+Mode mode = NORMAL;
 
 typedef State cur[9];
 
@@ -175,7 +183,13 @@ int print_grid(Automatons *automaton) {
         }
         printf("\n");
     }
-    printf("\n automaton: %s\n", type[automaton->type_index].arg);
+    printf("\ncontrols: \n");
+    printf("render next: n | change automaton: j, k\n");
+    printf("init random: r | options: glider - g, diode - d, oscillator - o\n");
+    printf("automaton: %s\n", type[automaton->type_index].arg);
+    if(mode == OPTION) {
+        printf("OPTION MODE\n");
+    }
     return alive_count;
 }
 
@@ -213,15 +227,95 @@ void init_diode(size_t offset) {
     }
 }
 
-void usage(char *program) {
-    fprintf(stderr, "usage: %s <gol | seeds | bbrain | daynight | wireworld> -r -o <glider & oscillator & diode> \n", program);
-    exit(1);
-}
-
-void render(Automatons *automaton) {
+void *render(void *input) {
+    Automatons *automaton = (Automatons*)input;
     system("clear");
     print_grid(automaton);
     gen_next(automaton->automaton);
+    return (void*)1;
+}
+
+typedef struct {
+    void *input1;
+    void *input2;
+} Inputs;
+
+void *play(void *input) {
+    Inputs *inputs = (Inputs*)input;
+    char *c = (char*)inputs->input2;
+    Automatons *automaton = (Automatons*)inputs->input1;
+    while(1) {
+        if(*c == 'p') {
+            return (void*)1;
+        }
+        render(automaton);
+    }
+    return (void*)0;
+}
+
+void *handle_input(void *input) {
+    Inputs *inputs = (Inputs*)input;
+    Automatons *automaton = (Automatons*)inputs->input1;
+    char *c = (char*)inputs->input2;
+    init_grid(0);
+    if(automaton->options[0].value) init_glider(5);
+    if(automaton->options[1].value) init_oscillator(5);
+    if(automaton->options[2].value) init_diode(5);
+    render(automaton);
+    while(read(STDIN_FILENO, c, 1) == 1) {
+        switch(*c) {
+            case 'q':
+                return input;
+                break;
+            case 'j':
+                automaton->type_index -= 1;
+                automaton->type_index %= TYPE_SIZE;
+                automaton->automaton = type[automaton->type_index].ptr;
+                render(automaton);
+                break;
+            case 'k':
+                automaton->type_index += 1;
+                automaton->type_index %= TYPE_SIZE;
+                automaton->automaton = type[automaton->type_index].ptr;
+                render(automaton);
+                break;
+            case 'n':
+                render(automaton);
+                break;
+            case 'r':
+                init_grid(1);
+                render(automaton);
+                break;
+            case 'g':
+                if(mode == OPTION) {
+                    init_glider(5);
+                    mode = NORMAL;
+                }
+                render(automaton);
+                break;
+            case 'd':
+                if(mode == OPTION) {
+                    init_glider(5);
+                    mode = NORMAL;
+                }
+                render(automaton);
+                break;
+            case 'o':
+                if(mode == OPTION) {
+                    init_glider(5);
+                    mode = NORMAL;
+                } else {
+                    mode = OPTION;
+                }
+                render(automaton);
+                break;
+            case 'p':
+                play(input);
+            default:
+                break;
+        }
+    }
+    return input;
 }
 
 int main(int argc, char **argv) {
@@ -229,115 +323,27 @@ int main(int argc, char **argv) {
     (void)argc;
 
     srand(time(NULL));
-    Automatons automaton = {0};
+    Automatons *automaton = malloc(sizeof(Automatons));
     Options options[OPTION_SIZE] = {
         {"glider", 0},
         {"oscillator", 0},
         {"diode", 0},
     };
+    automaton->automaton = type[0].ptr;
 
-    memcpy(automaton.options, options, sizeof(Options) * OPTION_SIZE);
+    memcpy(automaton->options, options, sizeof(Options) * OPTION_SIZE);
 
-    char *program = *argv + 0;
-    char *automaton_input = *(++argv);
-    if(automaton_input == NULL) {
-        usage(program);
-    }
-
-    for(size_t i = 0; i < TYPE_SIZE; i++) {
-        if(strcmp(type[i].arg, automaton_input) == 0) {
-            automaton.type_index = i;
-            automaton.automaton = type[i].ptr; 
-        }
-    }
-    if(automaton.automaton == NULL) {
-        usage(program);
-    }
-
-    while(*(++argv) != NULL) {
-        char *flag = *(argv);
-        if(strcmp(flag, "-r") == 0) {
-            automaton.random = 1;
-        } 
-        if(strcmp(flag, "-o") == 0) {
-            if(*(argv + 1) == NULL) {
-                usage(program);
-            }
-            // (void) supresses the unused calculation warning
-            (void)*(++argv);
-            for(size_t i = 0; i < OPTION_SIZE && *(argv) != NULL; i++) {
-                char *option = *(argv);
-                printf("%s\n", option);
-                if(strcmp(option, automaton.options[i].arg) == 0) {
-                    automaton.options[i].value = 1;
-                    (void)*(++argv);
-                }
-            }
-        }
-        if(strcmp(flag, "-h") == 0) {
-            usage(program);
-        }
-    }
+    char *program = argv[0];
+    (void)program;
 
     begin_raw();
 
     char c;
+    Inputs *inputs = malloc(sizeof(Inputs));
+    inputs->input1 = automaton;
+    inputs->input2 = &c;
 
-    init_grid(automaton.random);
-    if(automaton.options[0].value) init_glider(5);
-    if(automaton.options[1].value) init_oscillator(5);
-    if(automaton.options[2].value) init_diode(5);
-    int option_mode = 0;
-    render(&automaton);
-    while(read(STDIN_FILENO, &c, 1) == 1) {
-        switch(c) {
-            case 'q':
-                return 0;
-                break;
-            case 'j':
-                automaton.type_index -= 1;
-                automaton.type_index %= TYPE_SIZE;
-                automaton.automaton = type[automaton.type_index].ptr;
-                render(&automaton);
-                break;
-            case 'k':
-                automaton.type_index += 1;
-                automaton.type_index %= TYPE_SIZE;
-                automaton.automaton = type[automaton.type_index].ptr;
-                render(&automaton);
-                break;
-            case 'n':
-                render(&automaton);
-                break;
-            case 'r':
-                init_grid(1);
-                render(&automaton);
-                break;
-            case 'g':
-                if(option_mode) {
-                    init_glider(5);
-                    option_mode = 0;
-                }
-                render(&automaton);
-                break;
-            case 'd':
-                if(option_mode) {
-                    init_glider(5);
-                    option_mode = 0;
-                }
-                render(&automaton);
-                break;
-            case 'o':
-                if(option_mode) {
-                    init_glider(5);
-                    option_mode = 0;
-                    render(&automaton);
-                } else {
-                    option_mode = 1; 
-                }
-                break;
-            default:
-                break;
-        }
-    }
+    handle_input(inputs);
+
+    return 0;
 }
