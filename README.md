@@ -7,8 +7,9 @@ Dependencies: GCC
 ## Quick Start
 ```sh
 ./build.sh
-./main <gol | seeds | bbrain | daynight | wireworld> -r -o <glider & oscillator & diode>
+./main
 ```
+The UI explains the controls. Press 'O' to enter options mode.
 
 ## Implementations
 Game of Life,
