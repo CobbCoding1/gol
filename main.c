@@ -28,6 +28,7 @@ typedef enum {
 typedef enum {
     NORMAL,
     OPTION,
+    PLAY,
 } Mode;
 
 Mode mode = NORMAL;
@@ -183,7 +184,7 @@ int print_grid(Automatons *automaton) {
         printf("\n");
     }
     printf("\ncontrols: \n");
-    printf("render next: n | change automaton: j, k \ninit random: r | option mode: o\n");
+    printf("render next: n | change automaton: j, k \ninit random: r | option mode: o | play: p\n");
     if(mode == OPTION) {
         printf("options: glider - g, diode - d, oscillator - o\n");
     }
@@ -229,6 +230,11 @@ void init_diode(size_t offset) {
     }
 }
 
+typedef struct {
+    void *input1;
+    void *input2;
+} Inputs;
+
 void *render(void *input) {
     Automatons *automaton = (Automatons*)input;
     system("clear");
@@ -237,20 +243,18 @@ void *render(void *input) {
     return (void*)1;
 }
 
-typedef struct {
-    void *input1;
-    void *input2;
-} Inputs;
 
-void *play(void *input) {
+void *play(void *input, int time_to_wait) {
     Inputs *inputs = (Inputs*)input;
-    char *c = (char*)inputs->input2;
     Automatons *automaton = (Automatons*)inputs->input1;
-    while(1) {
-        if(*c == 'p') {
-            return (void*)1;
+    if(mode == PLAY) {
+        size_t counter = 100;
+        while(counter > 0) {
+            render(automaton);
+            counter--;
+            usleep(1000 * time_to_wait);
         }
-        render(automaton);
+        mode = NORMAL;
     }
     return (void*)0;
 }
@@ -316,8 +320,20 @@ void *handle_input(void *input) {
                 }
                 render(automaton);
                 break;
-            case 'p':
-                play(input);
+            case 'p': {
+                char num[8] = {0};
+                size_t num_len = 0;
+                while(read(STDIN_FILENO, c, 1) == 1 && *c != '\n') {
+                    printf("%c\n", *c);
+                    if(!isdigit(c)) {
+                        mode = NORMAL;
+                        break;
+                    }
+                    num[num_len++] = *c;
+                }
+                mode = PLAY;
+                play(input, atoi(num));
+            } break;
             default:
                 break;
         }
