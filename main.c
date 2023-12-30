@@ -18,7 +18,6 @@
 #define ALMOST_DEAD '*'
 #define CONDUCTOR_CELL '^'
 
-
 typedef enum {
     DEAD,
     ALIVE,
@@ -184,11 +183,14 @@ int print_grid(Automatons *automaton) {
         printf("\n");
     }
     printf("\ncontrols: \n");
-    printf("render next: n | change automaton: j, k\n");
-    printf("init random: r | options: glider - g, diode - d, oscillator - o\n");
-    printf("automaton: %s\n", type[automaton->type_index].arg);
+    printf("render next: n | change automaton: j, k \ninit random: r | option mode: o\n");
     if(mode == OPTION) {
-        printf("OPTION MODE\n");
+        printf("options: glider - g, diode - d, oscillator - o\n");
+    }
+    printf("automaton: %s\n", type[automaton->type_index].arg);
+
+    if(mode == OPTION) {
+        printf("\nOPTION MODE\n");
     }
     return alive_count;
 }
@@ -265,6 +267,11 @@ void *handle_input(void *input) {
     while(read(STDIN_FILENO, c, 1) == 1) {
         switch(*c) {
             case 'q':
+                if(mode == OPTION) {
+                    mode = NORMAL;
+                    render(automaton);
+                    break;
+                }
                 return input;
                 break;
             case 'j':
@@ -295,14 +302,14 @@ void *handle_input(void *input) {
                 break;
             case 'd':
                 if(mode == OPTION) {
-                    init_glider(5);
+                    init_diode(5);
                     mode = NORMAL;
                 }
                 render(automaton);
                 break;
             case 'o':
                 if(mode == OPTION) {
-                    init_glider(5);
+                    init_oscillator(5);
                     mode = NORMAL;
                 } else {
                     mode = OPTION;
