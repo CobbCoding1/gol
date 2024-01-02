@@ -237,7 +237,7 @@ typedef struct {
 
 void *render(void *input) {
     Automatons *automaton = (Automatons*)input;
-    system("clear");
+    printf("\e[1;1H\e[2J");
     print_grid(automaton);
     gen_next(automaton->automaton);
     return (void*)1;
@@ -248,11 +248,10 @@ void *play(void *input, int time_to_wait) {
     Inputs *inputs = (Inputs*)input;
     Automatons *automaton = (Automatons*)inputs->input1;
     if(mode == PLAY) {
-        size_t counter = 100;
-        while(counter > 0) {
+        size_t counter = time_to_wait;
+	for(size_t i = counter; i > 0; i--) {
             render(automaton);
-            counter--;
-            usleep(1000 * time_to_wait);
+            usleep(1000 * 50);
         }
         mode = NORMAL;
     }
@@ -324,9 +323,8 @@ void *handle_input(void *input) {
                 char num[8] = {0};
                 size_t num_len = 0;
                 while(read(STDIN_FILENO, c, 1) == 1 && *c != '\n') {
-                    printf("%c\n", *c);
-                    if(!isdigit(c)) {
-                        mode = NORMAL;
+                    if(!isdigit(*c)) {
+			strncpy(num, "50", 3);
                         break;
                     }
                     num[num_len++] = *c;
