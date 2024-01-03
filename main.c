@@ -8,11 +8,6 @@
 #include <termios.h>
 #include <pthread.h>
 
-#define WIDTH 50 
-#define HEIGHT 25 
-
-#define SPEED 500 
-
 #define BACKGROUND '-'
 #define CELL '#'
 #define ALMOST_DEAD '*'
@@ -69,11 +64,6 @@ State wireworld[4][9] = {
     {CONDUCTOR, ALIVE, ALIVE, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR, CONDUCTOR},
 };
 
-typedef struct {
-    char *arg;
-    int value;
-} Options;
-
 typedef void(*fun_ptr);
 
 typedef struct {
@@ -82,11 +72,9 @@ typedef struct {
 } Type;
 
 #define TYPE_SIZE 5
-#define OPTION_SIZE 3
 typedef struct {
     cur *automaton;
     int random;
-    Options options[OPTION_SIZE];
     size_t type_index;
 } Automatons;
 
@@ -111,77 +99,69 @@ void begin_raw() {
     }
     atexit(stop_raw);
     struct termios raw = orig_termios;
-    //raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    //raw.c_oflag &= ~(OPOST);
-    //raw.c_cflag |= (CS8);
-    //raw.c_iflag |= IUTF8;
-    // ICANON | IEXTEN
     raw.c_lflag &= ~(ECHO | ICANON | ISIG);
-    //raw.c_cc[VMIN] = 0;
-    //raw.c_cc[VTIME] = 1;
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
         die("tcsetattr");
     }
 }
 
-Cell grid[HEIGHT][WIDTH] = {0};
 
-void init_grid(int random) {
-    for(size_t i = 0; i < HEIGHT; i++) {
-        for(size_t j = 0; j < WIDTH; j++) {
+void init_grid(int random, Cell *grid, size_t height, size_t width) {
+    for(size_t i = 0; i < height; i++) {
+        for(size_t j = 0; j < width; j++) {
             if(rand() % 2 == 0 && random == 1) {
-                grid[i][j].state = ALIVE;
+                grid[i*width+j].state = ALIVE;
                 continue;
             }
-            grid[i][j].state = DEAD;
+            grid[i*width+j].state = DEAD;
         }
     }
 }
 
-void gen_next(State automaton[][9]) {
-    Cell new_grid[HEIGHT][WIDTH] = {0};
-    memcpy(new_grid, grid, sizeof(Cell) * HEIGHT * WIDTH);
-    for(size_t i = 0; i < HEIGHT; i++) {
-        for(size_t j = 0; j < WIDTH; j++) {
+void gen_next(State automaton[][9], Cell *grid, size_t height, size_t width) {
+    Cell *new_grid = calloc(height * width, sizeof(Cell));
+    memcpy(new_grid, grid, sizeof(Cell) * height * width);
+    for(size_t i = 0; i < height; i++) {
+        for(size_t j = 0; j < width; j++) {
             int alive_count = 0;
             for(int k = -1; k <= 1; k++) {
                 for(int l = -1; l <= 1; l++) {
                     if(k == 0 && l == 0) continue;
-                    int row = (i + k + HEIGHT) % HEIGHT;
-                    int col = (j + l + WIDTH) % WIDTH;
-                    if(grid[row][col].state == ALIVE) {
+                    int row = (i + k + height) % height;
+                    int col = (j + l + width) % width;
+                    if(grid[row*width+col].state == ALIVE) {
                             alive_count++;
                     }
                 }
             }
-            new_grid[i][j].state = automaton[grid[i][j].state][alive_count];
+            new_grid[i*width+j].state = automaton[grid[i*width+j].state][alive_count];
         }
     }
-    memcpy(grid, new_grid, sizeof(Cell) * HEIGHT * WIDTH);
+    memcpy(grid, new_grid, sizeof(Cell) * height * width);
 }
 
-int print_grid(Automatons *automaton) {
+int print_grid(Automatons *automaton, Cell *grid, size_t height, size_t width) {
     int alive_count = 0;
-    for(size_t i = 0; i < HEIGHT; i++) {
-        for(size_t j = 0; j < WIDTH; j++) {
-            switch(grid[i][j].state) {
+    for(size_t i = 0; i < height; i++) {
+        for(size_t j = 0; j < width; j++) {
+            switch(grid[i*width+j].state) {
                 case ALIVE:
                     alive_count++;
-                    printf("%c", CELL);
+                    putc(CELL, stdout);
                     break;
                 case DEAD:
-                    printf("%c", BACKGROUND);
+                    putc(BACKGROUND, stdout);
                     break;
                 case DYING:
-                    printf("%c", ALMOST_DEAD);
+                    putc(ALMOST_DEAD, stdout);
                     break;
                 case CONDUCTOR:
                     alive_count++;
-                    printf("%c", CONDUCTOR_CELL);
+                    putc(CONDUCTOR_CELL, stdout);
                     break;
             }
         }
-        printf("\n");
+        putc('\n', stdout);
     }
     printf("\ncontrols: \n");
     printf("render next: n | change automaton: j, k \ninit random: r | option mode: o | play: p\n");
@@ -196,37 +176,40 @@ int print_grid(Automatons *automaton) {
     return alive_count;
 }
 
-void init_glider(size_t offset) {
-    grid[offset+0][offset+1].state = ALIVE;
-    grid[offset+1][offset+2].state = ALIVE;
-    grid[offset+2][offset+0].state = ALIVE;
-    grid[offset+2][offset+1].state = ALIVE;
-    grid[offset+2][offset+2].state = ALIVE;
+void init_glider(size_t offset, Cell *grid, size_t height, size_t width) {
+    (void)height;
+    grid[(offset+0)*width+offset+1].state = ALIVE;
+    grid[(offset+1)*width+offset+2].state = ALIVE;
+    grid[(offset+2)*width+offset+0].state = ALIVE;
+    grid[(offset+2)*width+offset+1].state = ALIVE;
+    grid[(offset+2)*width+offset+2].state = ALIVE;
 }
 
-void init_oscillator(size_t offset) {
-    grid[offset+0][5].state = ALIVE;
-    grid[offset+0][6].state = ALIVE;
-    grid[offset+1][5].state = ALIVE;
-    grid[offset+1][6].state = ALIVE;
-    grid[offset+1][4].state = DYING;
-    grid[offset+0][7].state = DYING;
-    grid[offset-1][5].state = DYING;
-    grid[offset+2][6].state = DYING;
+void init_oscillator(size_t offset, Cell *grid, size_t height, size_t width) {
+    (void)height;
+    grid[(offset+0)*width+5].state = ALIVE;
+    grid[(offset+0)*width+6].state = ALIVE;
+    grid[(offset+1)*width+5].state = ALIVE;
+    grid[(offset+1)*width+6].state = ALIVE;
+    grid[(offset+1)*width+4].state = DYING;
+    grid[(offset+0)*width+7].state = DYING;
+    grid[(offset+(-1))*width+5].state = DYING;
+    grid[(offset+2)*width+6].state = DYING;
 }
 
-void init_diode(size_t offset) {
-    grid[offset+1][0].state = CONDUCTOR;
-    grid[offset+1][1].state = DYING;
-    grid[offset+1][2].state = ALIVE;
-    grid[offset+0][3].state = CONDUCTOR;
-    grid[offset+2][3].state = CONDUCTOR;
-    grid[offset+2][4].state = CONDUCTOR;
-    grid[offset+0][4].state = CONDUCTOR;
-    grid[offset+1][5].state = CONDUCTOR;
-    grid[offset+1][6].state = CONDUCTOR;
-    for(size_t i = 7; i < WIDTH; i++) {
-        grid[offset+1][i].state = CONDUCTOR;
+void init_diode(size_t offset, Cell *grid, size_t height, size_t width) {
+    (void)height;
+    grid[(offset+1)*width+0].state = CONDUCTOR;
+    grid[(offset+1)*width+1].state = DYING;
+    grid[(offset+1)*width+2].state = ALIVE;
+    grid[(offset+0)*width+3].state = CONDUCTOR;
+    grid[(offset+2)*width+3].state = CONDUCTOR;
+    grid[(offset+2)*width+4].state = CONDUCTOR;
+    grid[(offset+0)*width+4].state = CONDUCTOR;
+    grid[(offset+1)*width+5].state = CONDUCTOR;
+    grid[(offset+1)*width+6].state = CONDUCTOR;
+    for(size_t i = 7; i < width; i++) {
+        grid[(offset+1)*width+i].state = CONDUCTOR;
     }
 }
 
@@ -235,127 +218,120 @@ typedef struct {
     void *input2;
 } Inputs;
 
-void *render(void *input) {
+void render(void *input, Cell *grid, size_t height, size_t width) {
     Automatons *automaton = (Automatons*)input;
     printf("\e[1;1H\e[2J");
-    print_grid(automaton);
-    gen_next(automaton->automaton);
-    return (void*)1;
+    print_grid(automaton, grid, height, width);
+    gen_next(automaton->automaton, grid, height, width);
 }
 
-
-void *play(void *input, int time_to_wait) {
+void play(void *input, int time_to_wait, Cell *grid, size_t height, size_t width) {
     Inputs *inputs = (Inputs*)input;
     Automatons *automaton = (Automatons*)inputs->input1;
     if(mode == PLAY) {
         size_t counter = time_to_wait;
-	for(size_t i = counter; i > 0; i--) {
-            render(automaton);
+        for(size_t i = counter; i > 0; i--) {
+            render(automaton, grid, height, width);
             usleep(1000 * 50);
         }
         mode = NORMAL;
     }
-    return (void*)0;
 }
 
-void *handle_input(void *input) {
+void handle_input(void *input, Cell *grid, size_t height, size_t width) {
     Inputs *inputs = (Inputs*)input;
     Automatons *automaton = (Automatons*)inputs->input1;
     char *c = (char*)inputs->input2;
-    init_grid(0);
-    if(automaton->options[0].value) init_glider(5);
-    if(automaton->options[1].value) init_oscillator(5);
-    if(automaton->options[2].value) init_diode(5);
-    render(automaton);
+    init_grid(0, grid, height, width);
+    render(automaton, grid, height, width);
     while(read(STDIN_FILENO, c, 1) == 1) {
         switch(*c) {
             case 'q':
                 if(mode == OPTION) {
                     mode = NORMAL;
-                    render(automaton);
+                    render(automaton, grid, height, width);
                     break;
                 }
-                return input;
-                break;
+                return;
             case 'j':
                 automaton->type_index -= 1;
                 automaton->type_index %= TYPE_SIZE;
                 automaton->automaton = type[automaton->type_index].ptr;
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'k':
                 automaton->type_index += 1;
                 automaton->type_index %= TYPE_SIZE;
                 automaton->automaton = type[automaton->type_index].ptr;
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'n':
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'r':
-                init_grid(1);
-                render(automaton);
+                init_grid(1, grid, height, width);
+                render(automaton, grid, height, width);
                 break;
             case 'g':
                 if(mode == OPTION) {
-                    init_glider(5);
+                    init_glider(5, grid, height, width);
                     mode = NORMAL;
                 }
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'd':
                 if(mode == OPTION) {
-                    init_diode(5);
+                    init_diode(5, grid, height, width);
                     mode = NORMAL;
                 }
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'o':
                 if(mode == OPTION) {
-                    init_oscillator(5);
+                    init_oscillator(5, grid, height, width);
                     mode = NORMAL;
                 } else {
                     mode = OPTION;
                 }
-                render(automaton);
+                render(automaton, grid, height, width);
                 break;
             case 'p': {
+                printf("Enter the time to play in 100s of ms\n");
                 char num[8] = {0};
                 size_t num_len = 0;
                 while(read(STDIN_FILENO, c, 1) == 1 && *c != '\n') {
                     if(!isdigit(*c)) {
-			strncpy(num, "50", 3);
+                        strncpy(num, "50", 3);
                         break;
                     }
                     num[num_len++] = *c;
                 }
                 mode = PLAY;
-                play(input, atoi(num));
+                play(input, atoi(num), grid, height, width);
             } break;
             default:
                 break;
         }
     }
-    return input;
 }
 
 int main(int argc, char **argv) {
-    // (void) supresses unused variable warning
-    (void)argc;
+    char *program = argv[0];
+    if(argc < 3) {
+	fprintf(stderr, "usage: %s <height: 1-25> <width: 1-100>\n", program);
+	exit(1);
+    }
+    size_t height = atoi(argv[1]);
+    size_t width = atoi(argv[2]);
+    if(height == 0 || width == 0 || height > 25 || width > 100) {
+	fprintf(stderr, "please enter a valid width and height\n");
+	exit(1);
+    }
+    Cell *grid = calloc(height*width, sizeof(Cell));
 
     srand(time(NULL));
     Automatons *automaton = malloc(sizeof(Automatons));
-    Options options[OPTION_SIZE] = {
-        {"glider", 0},
-        {"oscillator", 0},
-        {"diode", 0},
-    };
     automaton->automaton = type[0].ptr;
-
-    memcpy(automaton->options, options, sizeof(Options) * OPTION_SIZE);
-
-    char *program = argv[0];
-    (void)program;
 
     begin_raw();
 
@@ -364,7 +340,7 @@ int main(int argc, char **argv) {
     inputs->input1 = automaton;
     inputs->input2 = &c;
 
-    handle_input(inputs);
+    handle_input(inputs, grid, height, width);
 
     return 0;
 }
